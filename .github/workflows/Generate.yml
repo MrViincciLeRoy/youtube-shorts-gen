@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "assets/**"
-      - "generate_video.py"
+      - "assets/analytics.png"
   workflow_dispatch:
 
 jobs:
@@ -13,6 +12,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Skip if commit is from this workflow
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[skip-generate]')
+        run: |
+          echo "Commit tagged [skip-generate], exiting."
+          exit 0
+
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -28,12 +33,29 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+      - name: Download thumbnail video from Google Drive
+        run: |
+          pip install gdown
+          gdown --id ${{ secrets.GDRIVE_THUMBNAIL_ID }} -O assets/thumbnail.mp4
+
+      - name: Download sound from Google Drive
+        run: |
+          gdown --id ${{ secrets.GDRIVE_SOUND_ID }} -O assets/sound.mp3
+
       - name: Generate video
         run: python generate_video.py
 
-      - name: Upload video
+      - name: Upload video artifact
         uses: actions/upload-artifact@v4
         with:
           name: youtube-short-${{ github.run_number }}
           path: output/short.mp4
           retention-days: 14
+
+      - name: Commit deletion of downloaded/used assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "[skip-generate] cleanup assets after generation"
+          git push
