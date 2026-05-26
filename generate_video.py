@@ -7,17 +7,20 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import AudioFileClip, VideoClip, VideoFileClip, concatenate_videoclips
 
-SCREENSHOT_PATH   = "assets/analytics.png"
-THUMBNAIL_PATH    = "assets/thumbnail.mp4"
-AUDIO_PATH        = "assets/sound.mp3"
-OUTPUT_PATH       = "output/short.mp4"
-INTERMEDIATE_PATH = "output/intermediate.mp4"
+SCREENSHOT_PATH = "assets/analytics.png"
+THUMBNAIL_PATH  = "assets/thumbnail.mp4"
+AUDIO_PATH      = "assets/sound.mp3"
+OUTPUT_PATH     = "output/short.mp4"
 
-FINAL_DURATION    = 8
-THUMBNAIL_DURATION = 4
-SHORT_CLIP_DURATION = 6  # last 6s of the 10s generated clip
-GENERATED_DURATION = 10
-FPS = 30
+# HOOK_DURATION: 2 = short punchy intro, 4 = longer intro (set via env var)
+HOOK_DURATION    = int(os.environ.get("HOOK_DURATION", "2"))
+CONTENT_DURATION = 4
+FINAL_DURATION   = HOOK_DURATION + CONTENT_DURATION
+
+# We generate more than we need so poll animations have time to play out
+GENERATED_DURATION = CONTENT_DURATION + 6
+
+FPS  = 30
 W, H = 1080, 1920
 
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
@@ -124,7 +127,7 @@ def build_make_frame(bg_np, banner, poll_plain, poll_pct):
         base.paste(banner, (0, banner_y), banner)
 
         if t >= 0.5:
-            poll = poll_pct if t >= 7.0 else poll_plain
+            poll = poll_pct if t >= GENERATED_DURATION - 3.0 else poll_plain
             progress = min(1.0, (t - 0.5) / 0.4)
             card = apply_alpha(poll.copy(), progress)
             if t < 1.1:
@@ -145,6 +148,8 @@ def build_make_frame(bg_np, banner, poll_plain, poll_pct):
 
 def main():
     os.makedirs("output", exist_ok=True)
+
+    print(f"Hook: {HOOK_DURATION}s  |  Content: {CONTENT_DURATION}s  |  Total: {FINAL_DURATION}s")
 
     if not os.path.exists(SCREENSHOT_PATH):
         print("[info] No analytics.png — generating placeholder.")
@@ -171,34 +176,31 @@ def main():
     poll_plain = make_poll_sticker(show_pct=False)
     poll_pct   = make_poll_sticker(show_pct=True, yes_pct=yes_pct, total_votes=total_votes)
 
-    print("Rendering 10s base clip...")
+    print(f"Rendering {GENERATED_DURATION}s base clip...")
     base_clip = VideoClip(
         build_make_frame(bg, banner, poll_plain, poll_pct),
         duration=GENERATED_DURATION
     ).set_fps(FPS)
 
-    # Take last 6 seconds
-    short_clip = base_clip.subclip(GENERATED_DURATION - SHORT_CLIP_DURATION, GENERATED_DURATION)
+    # Always take the last CONTENT_DURATION seconds so poll reveal is included
+    content_clip = base_clip.subclip(GENERATED_DURATION - CONTENT_DURATION, GENERATED_DURATION)
 
-    # Load 4s thumbnail video from Drive (downloaded by workflow)
     if not os.path.exists(THUMBNAIL_PATH):
-        print("[warn] thumbnail.mp4 not found — skipping thumbnail intro.")
-        final_video = short_clip
+        print("[warn] thumbnail.mp4 not found — content only, no hook.")
+        final_video = content_clip
     else:
-        print("Loading thumbnail video...")
-        thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, THUMBNAIL_DURATION)
-        # Resize thumbnail to match 1080x1920 if needed
+        print(f"Loading thumbnail hook ({HOOK_DURATION}s)...")
+        thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, HOOK_DURATION)
         if thumb_clip.size != [W, H]:
             thumb_clip = thumb_clip.resize((W, H))
-        final_video = concatenate_videoclips([thumb_clip, short_clip], method="compose")
+        final_video = concatenate_videoclips([thumb_clip, content_clip], method="compose")
 
-    # Audio over entire 8s
     if os.path.exists(AUDIO_PATH):
         print("Adding audio...")
         audio = AudioFileClip(AUDIO_PATH).subclip(0, FINAL_DURATION)
         final_video = final_video.set_audio(audio)
     else:
-        print("[warn] No audio found — silent output.")
+        print("[warn] No audio — silent output.")
 
     print(f"Writing {OUTPUT_PATH} ...")
     final_video.write_videofile(
@@ -206,7 +208,6 @@ def main():
         audio_codec="aac", preset="fast", threads=4, logger=None
     )
 
-    # Cleanup intermediate assets
     print("Cleaning up downloaded assets...")
     for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH]:
         if os.path.exists(path):
