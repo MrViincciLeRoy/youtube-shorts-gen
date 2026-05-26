@@ -1,6 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
+from urllib.parse import urlparse, urlunparse
 from playwright.async_api import async_playwright
 
 CHANNEL = os.getenv("CHANNEL_URL", "https://www.youtube.com/@ptanetwork")
@@ -38,10 +39,9 @@ PRESETS = {
     },
 }
 
-# "about" tab was removed by YouTube in 2023 — now redirects to channel home
 PAGE_PATHS = {
     "channel": "",
-    "about": "/about",   # kept for URL compat; renders channel home now
+    "about": "/about",
     "videos": "/videos",
     "shorts": "/shorts",
     "community": "/community",
@@ -49,7 +49,9 @@ PAGE_PATHS = {
 
 def build_url(base, tab):
     path = PAGE_PATHS.get(tab, f"/{tab}")
-    return f"{base.rstrip('/')}{path}?app=desktop"
+    parsed = urlparse(base)
+    new_path = parsed.path.rstrip("/") + path
+    return urlunparse(parsed._replace(path=new_path))
 
 async def shoot(page, url, name):
     print(f"→ {url}")
