@@ -1,16 +1,16 @@
 name: Generate YouTube Short
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "assets/analytics.png"
   workflow_dispatch:
     inputs:
       hook_duration:
         description: 'Hook intro length in seconds (2 = punchy, 4 = longer)'
         required: true
         default: '2'
+      screenshot_run_id:
+        description: 'Run ID from Screenshot workflow (to fetch artifact)'
+        required: false
+        default: ''
 
 env:
   HOOK_DURATION: ${{ github.event.inputs.hook_duration || '2' }}
@@ -20,12 +20,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Skip if commit is from this workflow
-        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[skip-generate]')
-        run: |
-          echo "Commit tagged [skip-generate], exiting."
-          exit 0
-
       - uses: actions/checkout@v4
 
       - name: Install system dependencies
@@ -42,6 +36,47 @@ jobs:
         run: |
           pip install -r requirements.txt
           pip install gdown google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
+
+      - name: Download analytics screenshot artifact
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT_TOKEN }}
+          script: |
+            const runId = '${{ github.event.inputs.screenshot_run_id }}';
+            const { owner, repo } = context.repo;
+
+            let artifacts;
+            if (runId) {
+              const res = await github.rest.actions.listWorkflowRunArtifacts({
+                owner, repo, run_id: parseInt(runId)
+              });
+              artifacts = res.data.artifacts;
+            } else {
+              // fallback: grab latest analytics-screenshot artifact across all runs
+              const res = await github.rest.actions.listArtifactsForRepo({
+                owner, repo, name: 'analytics-screenshot', per_page: 1
+              });
+              artifacts = res.data.artifacts;
+            }
+
+            const artifact = artifacts.find(a => a.name === 'analytics-screenshot');
+            if (!artifact) throw new Error('analytics-screenshot artifact not found');
+
+            const download = await github.rest.actions.downloadArtifact({
+              owner, repo,
+              artifact_id: artifact.id,
+              archive_format: 'zip'
+            });
+
+            const fs = require('fs');
+            const path = require('path');
+            fs.mkdirSync('assets', { recursive: true });
+            fs.writeFileSync('/tmp/screenshot.zip', Buffer.from(download.data));
+
+      - name: Unzip screenshot
+        run: |
+          unzip -o /tmp/screenshot.zip -d assets/
+          ls assets/
 
       - name: Download thumbnail video from Google Drive
         run: gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_THUMBNAIL_ID }}" -O assets/thumbnail.mp4
@@ -61,22 +96,15 @@ jobs:
           path: output/short.mp4
           retention-days: 14
 
-      - name: Write YouTube token
-        env:
-          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
-        run: echo "$YOUTUBE_TOKEN" | base64 --decode > token.pkl
-
-      - name: Upload to YouTube
-        run: python upload_youtube.py
-
-      - name: Remove YouTube token
-        if: always()
-        run: rm -f token.pkl
-
-      - name: Commit deletion of downloaded/used assets
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git diff --cached --quiet || git commit -m "[skip-generate] cleanup assets after generation"
-          git push
+      # --- YouTube upload disabled for testing ---
+      # - name: Write YouTube token
+      #   env:
+      #     YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+      #   run: echo "$YOUTUBE_TOKEN" | base64 --decode > token.pkl
+      #
+      # - name: Upload to YouTube
+      #   run: python upload_youtube.py
+      #
+      # - name: Remove YouTube token
+      #   if: always()
+      #   run: rm -f token.pkl
