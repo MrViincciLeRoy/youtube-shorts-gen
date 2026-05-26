@@ -2,6 +2,7 @@
 import os
 import sys
 import random
+import datetime
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import AudioFileClip, VideoClip
@@ -153,7 +154,13 @@ def main():
 
     os.makedirs("output", exist_ok=True)
 
+    countries = ['Georgia', 'Egypt', 'Australia', 'South Africa']
+    today = datetime.date.today().isoformat()
+    country = random.choice(countries)
+    seed = hash(country + today) & 0x7FFFFFFF
+    random.seed(seed)
     total_votes = random.randint(60, 4000)
+    random.seed(seed + 1)
     yes_pct     = random.randint(20, 40)  # No but I'll like gets majority
 
     print("Preparing assets...")
