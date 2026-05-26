@@ -171,14 +171,17 @@ def main():
     poll_plain = make_poll_sticker(show_pct=False)
     poll_pct   = make_poll_sticker(show_pct=True, yes_pct=yes_pct, total_votes=total_votes)
 
-    print("Rendering 10s base clip...")
+    print("Rendering 10s base clip to disk...")
     base_clip = VideoClip(
         build_make_frame(bg, banner, poll_plain, poll_pct),
         duration=GENERATED_DURATION
     ).set_fps(FPS)
+    base_clip.write_videofile(INTERMEDIATE_PATH, fps=FPS, codec="libx264",
+                              preset="fast", threads=4, logger=None)
 
-    # Take last 6 seconds
-    short_clip = base_clip.subclip(GENERATED_DURATION - SHORT_CLIP_DURATION, GENERATED_DURATION)
+    # Load rendered file and take last 6 seconds
+    rendered = VideoFileClip(INTERMEDIATE_PATH)
+    short_clip = rendered.subclip(GENERATED_DURATION - SHORT_CLIP_DURATION, GENERATED_DURATION)
 
     # Load 4s thumbnail video from Drive (downloaded by workflow)
     if not os.path.exists(THUMBNAIL_PATH):
@@ -187,7 +190,6 @@ def main():
     else:
         print("Loading thumbnail video...")
         thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, THUMBNAIL_DURATION)
-        # Resize thumbnail to match 1080x1920 if needed
         if thumb_clip.size != [W, H]:
             thumb_clip = thumb_clip.resize((W, H))
         final_video = concatenate_videoclips([thumb_clip, short_clip], method="compose")
@@ -208,7 +210,7 @@ def main():
 
     # Cleanup intermediate assets
     print("Cleaning up downloaded assets...")
-    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH]:
+    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH, INTERMEDIATE_PATH]:
         if os.path.exists(path):
             os.remove(path)
             print(f"  deleted {path}")
