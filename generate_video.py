@@ -5,7 +5,7 @@ import random
 import datetime
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import AudioFileClip, VideoClip, VideoFileClip, concatenate_videoclips
+from moviepy.editor import VideoClip
 
 SCREENSHOT_PATH   = "assets/analytics.png"
 THUMBNAIL_PATH    = "assets/thumbnail.mp4"
@@ -179,38 +179,72 @@ def main():
     base_clip.write_videofile(INTERMEDIATE_PATH, fps=FPS, codec="libx264",
                               preset="fast", threads=4, logger=None)
 
-    # Load rendered file and take last 6 seconds
-    rendered = VideoFileClip(INTERMEDIATE_PATH)
-    short_clip = rendered.subclip(GENERATED_DURATION - SHORT_CLIP_DURATION, GENERATED_DURATION)
+    # Use ffmpeg directly for reliable cutting and concatenation
+    import subprocess, tempfile
 
-    # Load 4s thumbnail video from Drive (downloaded by workflow)
-    if not os.path.exists(THUMBNAIL_PATH):
-        print("[warn] thumbnail.mp4 not found — skipping thumbnail intro.")
-        final_video = short_clip
+    # Trim last 6s from intermediate using ffmpeg
+    trimmed_path = "output/trimmed.mp4"
+    subprocess.run([
+        "ffmpeg", "-y",
+        "-ss", str(GENERATED_DURATION - SHORT_CLIP_DURATION),
+        "-i", INTERMEDIATE_PATH,
+        "-t", str(SHORT_CLIP_DURATION),
+        "-c:v", "libx264", "-preset", "fast",
+        "-an", trimmed_path
+    ], check=True)
+
+    if os.path.exists(THUMBNAIL_PATH):
+        print("Scaling thumbnail to 1080x1920...")
+        scaled_thumb = "output/thumb_scaled.mp4"
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", THUMBNAIL_PATH,
+            "-t", str(THUMBNAIL_DURATION),
+            "-vf", f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2",
+            "-c:v", "libx264", "-preset", "fast",
+            "-an", scaled_thumb
+        ], check=True)
+
+        # Concat list
+        concat_list = "output/concat.txt"
+        with open(concat_list, "w") as f:
+            f.write(f"file 'thumb_scaled.mp4'
+")
+            f.write(f"file 'trimmed.mp4'
+")
+
+        silent_concat = "output/silent_final.mp4"
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", concat_list,
+            "-c", "copy", silent_concat
+        ], check=True)
     else:
-        print("Loading thumbnail video...")
-        thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, THUMBNAIL_DURATION)
-        if thumb_clip.size != [W, H]:
-            thumb_clip = thumb_clip.resize((W, H))
-        final_video = concatenate_videoclips([thumb_clip, short_clip], method="compose")
+        print("[warn] No thumbnail — using trimmed clip only.")
+        silent_concat = trimmed_path
 
-    # Audio over entire 8s
+    # Add audio over full 8s
     if os.path.exists(AUDIO_PATH):
         print("Adding audio...")
-        audio = AudioFileClip(AUDIO_PATH).subclip(0, FINAL_DURATION)
-        final_video = final_video.set_audio(audio)
+        subprocess.run([
+            "ffmpeg", "-y",
+            "-i", silent_concat,
+            "-i", AUDIO_PATH,
+            "-t", str(FINAL_DURATION),
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-shortest",
+            OUTPUT_PATH
+        ], check=True)
     else:
-        print("[warn] No audio found — silent output.")
+        print("[warn] No audio — copying silent.")
+        subprocess.run(["ffmpeg", "-y", "-i", silent_concat, "-c", "copy", OUTPUT_PATH], check=True)
 
-    print(f"Writing {OUTPUT_PATH} ...")
-    final_video.write_videofile(
-        OUTPUT_PATH, fps=FPS, codec="libx264",
-        audio_codec="aac", preset="fast", threads=4, logger=None
-    )
-
-    # Cleanup intermediate assets
-    print("Cleaning up downloaded assets...")
-    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH, INTERMEDIATE_PATH]:
+    # Cleanup
+    print("Cleaning up...")
+    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH, INTERMEDIATE_PATH,
+                 trimmed_path, "output/thumb_scaled.mp4", "output/concat.txt", "output/silent_final.mp4"]:
         if os.path.exists(path):
             os.remove(path)
             print(f"  deleted {path}")
