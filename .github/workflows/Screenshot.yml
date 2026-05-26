@@ -1,0 +1,130 @@
+name: YouTube Channel Screenshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel_url:
+        description: "YouTube channel URL (e.g. https://www.youtube.com/@ptanetwork)"
+        required: true
+        default: "https://www.youtube.com/@ptanetwork"
+
+      pages:
+        description: "Pages to capture (comma-separated: about,channel,videos,community,shorts)"
+        required: true
+        default: "about,channel"
+
+      full_page:
+        description: "Capture full scrollable page?"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+      device_preset:
+        description: "Device preset"
+        required: true
+        default: "pixel8"
+        type: choice
+        options:
+          - pixel8
+          - iphone15
+          - galaxy_s23
+          - custom
+
+      viewport_width:
+        description: "Custom viewport width (only if device_preset=custom)"
+        required: false
+        default: "393"
+
+      viewport_height:
+        description: "Custom viewport height (only if device_preset=custom)"
+        required: false
+        default: "852"
+
+      scale_factor:
+        description: "Custom device scale factor (only if device_preset=custom)"
+        required: false
+        default: "2.75"
+
+      wait_ms:
+        description: "Extra wait time in ms after page load (for lazy content)"
+        required: false
+        default: "3000"
+
+      headless:
+        description: "Run browser headless?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+      image_format:
+        description: "Screenshot format"
+        required: true
+        default: "png"
+        type: choice
+        options:
+          - png
+          - jpeg
+
+      upload_artifact:
+        description: "Upload screenshots as artifact?"
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+      artifact_retention_days:
+        description: "Artifact retention in days"
+        required: false
+        default: "7"
+
+  schedule:
+    # Runs daily at 06:00 UTC — comment out if not needed
+    - cron: "0 6 * * *"
+
+jobs:
+  screenshot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install playwright
+          python -m playwright install chromium --with-deps
+
+      - name: Run screenshot script
+        env:
+          CHANNEL_URL: ${{ github.event.inputs.channel_url || 'https://www.youtube.com/@ptanetwork' }}
+          PAGES: ${{ github.event.inputs.pages || 'about,channel' }}
+          FULL_PAGE: ${{ github.event.inputs.full_page || 'false' }}
+          DEVICE_PRESET: ${{ github.event.inputs.device_preset || 'pixel8' }}
+          VIEWPORT_WIDTH: ${{ github.event.inputs.viewport_width || '393' }}
+          VIEWPORT_HEIGHT: ${{ github.event.inputs.viewport_height || '852' }}
+          SCALE_FACTOR: ${{ github.event.inputs.scale_factor || '2.75' }}
+          WAIT_MS: ${{ github.event.inputs.wait_ms || '3000' }}
+          HEADLESS: ${{ github.event.inputs.headless || 'true' }}
+          IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
+        run: python screenshot.py
+
+      - name: Upload screenshots
+        if: ${{ github.event.inputs.upload_artifact != 'false' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pta-screenshots-${{ github.run_number }}
+          path: "*.png *.jpeg"
+          retention-days: ${{ github.event.inputs.artifact_retention_days || 7 }}
