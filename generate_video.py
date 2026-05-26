@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import sys
 import random
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
@@ -16,12 +17,9 @@ W, H     = 1080, 1920
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 FONT_REG  = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
 
-# Reference image 2: card is ~60% wide, very light blue bg, lighter options
-POLL_BG   = (210, 228, 255, 248)   # lighter than before
-POLL_BLUE = (18,  18,  180, 255)
-OPTION_BG = (188, 212, 255, 255)   # slightly lighter
-SOUND_TEXT_FILL   = (255, 255, 255, 255)   # white center
-SOUND_TEXT_STROKE = (0,   0,   0,   255)   # black border
+POLL_BG    = (230, 239, 255, 245)
+POLL_BLUE  = (0,   0,   178, 255)
+OPTION_BG  = (202, 221, 255, 240)
 
 
 def get_font(size, bold=False):
@@ -53,25 +51,20 @@ def zoom_frame(bg_np, t):
     return img.crop((xo, yo, xo + W, yo + H)).convert("RGBA")
 
 
-def draw_stroked_text(draw, pos, text, font, fill, stroke_color, stroke_width, anchor="mm"):
-    x, y = pos
-    for dx in range(-stroke_width, stroke_width + 1):
-        for dy in range(-stroke_width, stroke_width + 1):
-            if dx == 0 and dy == 0:
-                continue
-            draw.text((x + dx, y + dy), text, font=font, fill=stroke_color, anchor=anchor)
-    draw.text((x, y), text, font=font, fill=fill, anchor=anchor)
-
-
 def make_sound_banner():
-    # No white card — just big stroked text over the bg like reference image 2
-    bh = 200
+    bh = 190
     img  = Image.new("RGBA", (W, bh), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    font = get_font(130, bold=True)
-    draw_stroked_text(draw, (W // 2, bh // 2), "USE THIS SOUND!",
-                      font, SOUND_TEXT_FILL, SOUND_TEXT_STROKE,
-                      stroke_width=8, anchor="mm")
+    font = get_font(100, bold=True)
+    stroke = 8
+    x, y = W // 2, bh // 2
+    for dx in range(-stroke, stroke + 1):
+        for dy in range(-stroke, stroke + 1):
+            if dx == 0 and dy == 0:
+                continue
+            draw.text((x + dx, y + dy), "Use this sound", font=font,
+                      fill=(0, 0, 0, 255), anchor="mm")
+    draw.text((x, y), "Use this sound", font=font, fill=(255, 255, 255, 255), anchor="mm")
     return img
 
 
@@ -83,51 +76,31 @@ def format_votes(n):
     return f"{n} votes"
 
 
-def make_poll_sticker(show_pct=False, yes_votes=0, no_votes=0):
-    # Reference image 2: card ~60% of 1080 = ~648px, left-aligned with some margin
-    # Height: title ~80, opt1 ~100, gap, opt2 ~100, votes ~50 + padding
-    pw = 650
-    ph = 30 + 80 + 10 + 100 + 12 + 100 + 18 + 48 + 22   # = 420
+def make_poll_sticker(show_pct=False, yes_pct=0, total_votes=0):
+    pw, ph = 625, 460
 
     img  = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)], radius=30, fill=POLL_BG)
+    draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)], radius=28, fill=POLL_BG)
 
-    title_f = get_font(52, bold=True)
-    opt_f   = get_font(46, bold=True)
-    pct_f   = get_font(44, bold=True)
-    vote_f  = get_font(32)
+    title_f = get_font(42, bold=True)
+    opt_f   = get_font(36, bold=True)
+    pct_f   = get_font(34)
+    vote_f  = get_font(26)
 
-    # Title
-    draw.text((26, 30 + 40), "Will you subscribe?",
-              font=title_f, fill=POLL_BLUE, anchor="lm")
+    draw.text((18, 82), "Please Subscribe", font=title_f, fill=POLL_BLUE, anchor="lm")
 
-    # Option 1 — Yes
-    o1y0 = 30 + 80 + 10
-    o1y1 = o1y0 + 100
-    draw.rounded_rectangle([(14, o1y0), (pw - 14, o1y1)], radius=18, fill=OPTION_BG)
-    o1mid = (o1y0 + o1y1) // 2
-    draw.text((36, o1mid), "Yes", font=opt_f, fill=POLL_BLUE, anchor="lm")
+    draw.rounded_rectangle([(18, 118), (pw - 18, 238)], radius=16, fill=OPTION_BG)
+    draw.text((52, 178), "Yes", font=opt_f, fill=POLL_BLUE, anchor="lm")
     if show_pct:
-        total = yes_votes + no_votes or 1
-        yes_pct = int(round(yes_votes / total * 100))
-        draw.text((pw - 30, o1mid), f"{yes_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
+        draw.text((pw - 40, 178), f"{yes_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
 
-    # Option 2 — No but I'll like
-    o2y0 = o1y1 + 12
-    o2y1 = o2y0 + 100
-    draw.rounded_rectangle([(14, o2y0), (pw - 14, o2y1)], radius=18, fill=OPTION_BG)
-    o2mid = (o2y0 + o2y1) // 2
-    draw.text((36, o2mid), "No but I'll like", font=opt_f, fill=POLL_BLUE, anchor="lm")
+    draw.rounded_rectangle([(18, 252), (pw - 18, 372)], radius=16, fill=OPTION_BG)
+    draw.text((52, 312), "No but I'll like", font=opt_f, fill=POLL_BLUE, anchor="lm")
     if show_pct:
-        no_pct = 100 - yes_pct
-        draw.text((pw - 30, o2mid), f"{no_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
-
-    # Vote count
-    votes_y = o2y1 + 18 + 24
-    draw.text((pw // 2, votes_y), format_votes(yes_votes + no_votes),
-              font=vote_f, fill=POLL_BLUE, anchor="mm")
+        draw.text((pw - 40, 312), f"{100 - yes_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
+        draw.text((pw // 2, ph - 30), format_votes(total_votes), font=vote_f, fill=POLL_BLUE, anchor="mm")
 
     return img
 
@@ -138,40 +111,28 @@ def apply_alpha(img: Image.Image, scale: float) -> Image.Image:
     return Image.merge("RGBA", (r, g, b, a))
 
 
-def build_make_frame(bg_np, banner):
-    # Banner sits ~40% down — same as reference
+def build_make_frame(bg_np, banner, poll_plain, poll_pct):
     banner_y = int(H * 0.40)
-
-    total_votes = random.randint(800, 3500)
-    yes_votes   = int(total_votes * random.uniform(0.60, 0.80))
-    no_votes    = total_votes - yes_votes
-
-    poll_no_pct   = make_poll_sticker(show_pct=False, yes_votes=yes_votes, no_votes=no_votes)
-    poll_with_pct = make_poll_sticker(show_pct=True,  yes_votes=yes_votes, no_votes=no_votes)
-
-    # Left-aligned with ~60px margin, poll sits just below banner
-    poll_x = 60
-    poll_y = banner_y + banner.height + 30
+    poll_x   = (W - poll_plain.width) // 2
+    poll_y   = int(H * 0.58)
 
     def make_frame(t):
         base = zoom_frame(bg_np, t)
         base.paste(banner, (0, banner_y), banner)
 
         if t >= 2.0:
-            poll = poll_with_pct if t >= 7.0 else poll_no_pct
+            poll = poll_pct if t >= 7.0 else poll_plain
             progress = min(1.0, (t - 2.0) / 0.4)
             card = apply_alpha(poll.copy(), progress)
-
             if t < 2.6:
                 boom = 1.0 + 0.055 * np.sin(np.pi * (t - 2.0) / 0.4)
                 nw = int(poll.width * boom)
                 nh = int(poll.height * boom)
                 card = card.resize((nw, nh), Image.LANCZOS)
-                px = poll_x - (nw - poll.width) // 2
+                px = (W - nw) // 2
                 py = poll_y - (nh - poll.height) // 2
             else:
                 px, py = poll_x, poll_y
-
             base.paste(card, (px, py), card)
 
         return np.array(base.convert("RGB"))
@@ -181,7 +142,7 @@ def build_make_frame(bg_np, banner):
 
 def main():
     if not os.path.exists(SCREENSHOT_PATH):
-        print("[info] No analytics.png — generating placeholder.")
+        print("[info] No analytics.png found — generating placeholder background.")
         os.makedirs("assets", exist_ok=True)
         placeholder = Image.new("RGB", (W, H), (15, 15, 30))
         draw = ImageDraw.Draw(placeholder)
@@ -191,12 +152,18 @@ def main():
         placeholder.save(SCREENSHOT_PATH)
 
     os.makedirs("output", exist_ok=True)
+
+    total_votes = random.randint(60, 4000)
+    yes_pct     = random.randint(20, 40)  # No but I'll like gets majority
+
     print("Preparing assets...")
-    bg     = prepare_bg(SCREENSHOT_PATH)
-    banner = make_sound_banner()
+    bg         = prepare_bg(SCREENSHOT_PATH)
+    banner     = make_sound_banner()
+    poll_plain = make_poll_sticker(show_pct=False)
+    poll_pct   = make_poll_sticker(show_pct=True, yes_pct=yes_pct, total_votes=total_votes)
 
     print("Rendering frames...")
-    clip = VideoClip(build_make_frame(bg, banner), duration=DURATION).set_fps(FPS)
+    clip = VideoClip(build_make_frame(bg, banner, poll_plain, poll_pct), duration=DURATION).set_fps(FPS)
 
     if os.path.exists(AUDIO_PATH):
         print(f"Adding audio: {AUDIO_PATH}")
