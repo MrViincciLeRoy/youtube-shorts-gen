@@ -38,16 +38,18 @@ PRESETS = {
     },
 }
 
+# "about" tab was removed by YouTube in 2023 — now redirects to channel home
 PAGE_PATHS = {
     "channel": "",
-    "about": "/about",
+    "about": "/about",   # kept for URL compat; renders channel home now
     "videos": "/videos",
     "shorts": "/shorts",
     "community": "/community",
 }
 
 def build_url(base, tab):
-    return f"{base.rstrip('/')}{PAGE_PATHS.get(tab, f'/{tab}')}"
+    path = PAGE_PATHS.get(tab, f"/{tab}")
+    return f"{base.rstrip('/')}{path}?app=desktop"
 
 async def shoot(page, url, name):
     print(f"→ {url}")
