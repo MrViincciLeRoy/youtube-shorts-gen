@@ -48,11 +48,22 @@ jobs:
                 )
                 await page.wait_for_timeout(3000)
 
-                more_btn = page.get_by_text("...more")
-                if await more_btn.count() > 0:
-                    await more_btn.first.click()
-                    await page.wait_for_timeout(1500)
+                # Try JS click first
+                clicked = await page.evaluate("""
+                    () => {
+                        const btn = document.querySelector('span.truncated-text-wiz__absolute-button');
+                        if (btn) { btn.click(); return true; }
+                        return false;
+                    }
+                """)
 
+                if not clicked:
+                    more_btn = page.get_by_text("...more")
+                    if await more_btn.count() > 0:
+                        await more_btn.first.scroll_into_view_if_needed()
+                        await more_btn.first.click(force=True)
+
+                await page.wait_for_timeout(2000)
                 await page.screenshot(path="/tmp/yt_test.png", full_page=False)
                 print("saved")
                 await browser.close()
