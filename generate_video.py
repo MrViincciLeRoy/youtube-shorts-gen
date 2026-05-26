@@ -208,10 +208,8 @@ def main():
         # Concat list
         concat_list = "output/concat.txt"
         with open(concat_list, "w") as f:
-            f.write(f"file 'thumb_scaled.mp4'
-")
-            f.write(f"file 'trimmed.mp4'
-")
+            f.write(f"file 'thumb_scaled.mp4'")
+            f.write(f"file 'trimmed.mp4'")
 
         silent_concat = "output/silent_final.mp4"
         subprocess.run([
