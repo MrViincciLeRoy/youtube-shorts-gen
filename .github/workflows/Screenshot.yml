@@ -105,7 +105,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install playwright
+          pip install playwright playwright-stealth
           python -m playwright install chromium --with-deps
 
       - name: Run screenshot script
@@ -120,7 +120,8 @@ jobs:
           WAIT_MS: ${{ github.event.inputs.wait_ms || '3000' }}
           HEADLESS: ${{ github.event.inputs.headless || 'true' }}
           IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
-          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
+          YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
+          YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
         run: python screenshot.py
 
       - name: Push screenshots to branch
@@ -128,16 +129,11 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-          # Save screenshots before switching branches
           cp -r screenshots /tmp/screenshots
 
-          # Checkout or create orphan screenshots branch
           git fetch origin screenshots 2>/dev/null && git checkout screenshots || git checkout --orphan screenshots
 
-          # On orphan branch, remove everything first
-          if git show-ref --quiet refs/heads/screenshots; then
-            :
-          else
+          if ! git show-ref --quiet refs/remotes/origin/screenshots; then
             git rm -rf . --quiet 2>/dev/null || true
           fi
 
@@ -160,7 +156,7 @@ jobs:
           echo "**Device:** \`${{ github.event.inputs.device_preset || 'pixel8' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          for f in screenshots/*; do
+          for f in /tmp/screenshots/*; do
             name=$(basename "$f")
             echo "### \`${name}\`" >> $GITHUB_STEP_SUMMARY
             echo "![${name}](${BASE_URL}/${name})" >> $GITHUB_STEP_SUMMARY
@@ -172,5 +168,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pta-screenshots-${{ github.run_number }}
-          path: screenshots/
+          path: /tmp/screenshots/
           retention-days: ${{ github.event.inputs.artifact_retention_days || 7 }}
