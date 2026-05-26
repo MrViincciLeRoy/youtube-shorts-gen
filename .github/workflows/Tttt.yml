@@ -1,4 +1,30 @@
-- name: Create and Run Script
+name: Run Playwright Scraper
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install playwright
+
+    - name: Install Playwright Browsers and System Dependencies
+      run: |
+        playwright install chromium --with-deps
+
+    - name: Create and Run Script
       run: |
         cat << 'EOF' > inline_script.py
         import asyncio
@@ -22,7 +48,6 @@
                 )
                 await page.wait_for_timeout(3000)
 
-                # Click ...more to expand description
                 more_btn = page.get_by_text("...more")
                 if await more_btn.count() > 0:
                     await more_btn.first.click()
@@ -34,5 +59,12 @@
 
         asyncio.run(main())
         EOF
-        
         python inline_script.py
+
+    - name: Upload Screenshot Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: youtube-screenshot
+        path: /tmp/yt_test.png
+        if-no-files-found: error
+        retention-days: 7
