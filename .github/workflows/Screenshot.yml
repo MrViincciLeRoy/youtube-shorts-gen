@@ -53,15 +53,6 @@ on:
         required: false
         default: "3000"
 
-      headless:
-        description: "Run browser headless?"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-
       image_format:
         description: "Screenshot format"
         required: true
@@ -103,13 +94,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install Xvfb and dependencies
         run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
           pip install playwright playwright-stealth
           python -m playwright install chromium --with-deps
 
-      - name: Run screenshot script
+      - name: Run screenshot script (headed via Xvfb)
         env:
+          DISPLAY: ":99"
           CHANNEL_URL: ${{ github.event.inputs.channel_url || 'https://www.youtube.com/@ptanetwork' }}
           PAGES: ${{ github.event.inputs.pages || 'about,channel' }}
           FULL_PAGE: ${{ github.event.inputs.full_page || 'false' }}
@@ -118,11 +112,14 @@ jobs:
           VIEWPORT_HEIGHT: ${{ github.event.inputs.viewport_height || '852' }}
           SCALE_FACTOR: ${{ github.event.inputs.scale_factor || '2.75' }}
           WAIT_MS: ${{ github.event.inputs.wait_ms || '3000' }}
-          HEADLESS: ${{ github.event.inputs.headless || 'true' }}
+          HEADLESS: "false"
           IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
           YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
           YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
-        run: python screenshot.py
+        run: |
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          python screenshot.py
 
       - name: Push screenshots to branch
         run: |
@@ -149,8 +146,7 @@ jobs:
       - name: Write job summary
         run: |
           REPO="${{ github.repository }}"
-          BRANCH="screenshots"
-          BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
+          BASE_URL="https://raw.githubusercontent.com/${REPO}/screenshots"
 
           echo "# 📸 Screenshots — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
