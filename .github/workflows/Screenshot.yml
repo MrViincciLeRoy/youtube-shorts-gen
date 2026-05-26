@@ -91,6 +91,8 @@ on:
 jobs:
   screenshot:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -120,6 +122,50 @@ jobs:
           IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
           YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: python screenshot.py
+
+      - name: Push screenshots to branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+          # Save screenshots before switching branches
+          cp -r screenshots /tmp/screenshots
+
+          # Checkout or create orphan screenshots branch
+          git fetch origin screenshots 2>/dev/null && git checkout screenshots || git checkout --orphan screenshots
+
+          # On orphan branch, remove everything first
+          if git show-ref --quiet refs/heads/screenshots; then
+            :
+          else
+            git rm -rf . --quiet 2>/dev/null || true
+          fi
+
+          cp /tmp/screenshots/* .
+
+          git add *.png *.jpeg 2>/dev/null || git add *.png 2>/dev/null || true
+          git commit -m "run #${{ github.run_number }} - $(date -u '+%Y-%m-%d %H:%M UTC')" || echo "nothing to commit"
+          git push origin screenshots
+
+      - name: Write job summary
+        run: |
+          REPO="${{ github.repository }}"
+          BRANCH="screenshots"
+          BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
+
+          echo "# 📸 Screenshots — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Channel:** \`${{ github.event.inputs.channel_url || 'https://www.youtube.com/@ptanetwork' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Pages:** \`${{ github.event.inputs.pages || 'about,channel' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Device:** \`${{ github.event.inputs.device_preset || 'pixel8' }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          for f in screenshots/*; do
+            name=$(basename "$f")
+            echo "### \`${name}\`" >> $GITHUB_STEP_SUMMARY
+            echo "![${name}](${BASE_URL}/${name})" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          done
 
       - name: Upload screenshots
         if: ${{ github.event.inputs.upload_artifact != 'false' }}
