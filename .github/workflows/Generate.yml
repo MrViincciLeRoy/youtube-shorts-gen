@@ -4,16 +4,21 @@ on:
   workflow_dispatch:
     inputs:
       hook_duration:
-        description: 'Hook intro length in seconds (2 = punchy, 4 = longer)'
-        required: true
+        description: 'Hook length in seconds (2 = punchy, 4 = longer)'
+        required: false
         default: '2'
+      content_duration:
+        description: 'Content section length in seconds (default 4)'
+        required: false
+        default: '4'
+      fps:
+        description: 'Frames per second (24, 30, or 60)'
+        required: false
+        default: '30'
       screenshot_run_id:
-        description: 'Run ID from Screenshot workflow (to fetch artifact)'
+        description: 'Run ID from Screenshot workflow (leave blank to use latest)'
         required: false
         default: ''
-
-env:
-  HOOK_DURATION: ${{ github.event.inputs.hook_duration || '2' }}
 
 jobs:
   build:
@@ -52,7 +57,6 @@ jobs:
               });
               artifacts = res.data.artifacts;
             } else {
-              // fallback: grab latest analytics-screenshot artifact across all runs
               const res = await github.rest.actions.listArtifactsForRepo({
                 owner, repo, name: 'analytics-screenshot', per_page: 1
               });
@@ -69,14 +73,11 @@ jobs:
             });
 
             const fs = require('fs');
-            const path = require('path');
             fs.mkdirSync('assets', { recursive: true });
             fs.writeFileSync('/tmp/screenshot.zip', Buffer.from(download.data));
 
       - name: Unzip screenshot
-        run: |
-          unzip -o /tmp/screenshot.zip -d assets/
-          ls assets/
+        run: unzip -o /tmp/screenshot.zip -d assets/
 
       - name: Download thumbnail video from Google Drive
         run: gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_THUMBNAIL_ID }}" -O assets/thumbnail.mp4
@@ -86,7 +87,9 @@ jobs:
 
       - name: Generate video
         env:
-          HOOK_DURATION: ${{ env.HOOK_DURATION }}
+          HOOK_DURATION:    ${{ github.event.inputs.hook_duration    || '2'  }}
+          CONTENT_DURATION: ${{ github.event.inputs.content_duration || '4'  }}
+          FPS:              ${{ github.event.inputs.fps              || '30' }}
         run: python generate_video.py
 
       - name: Upload video artifact

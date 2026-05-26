@@ -6,9 +6,17 @@ on:
   workflow_dispatch:
     inputs:
       hook_duration:
-        description: 'Hook intro length in seconds (2 = punchy, 4 = longer)'
+        description: 'Hook length in seconds (2 = punchy, 4 = longer)'
         required: false
         default: '2'
+      content_duration:
+        description: 'Content section length in seconds (default 4)'
+        required: false
+        default: '4'
+      fps:
+        description: 'Frames per second (24, 30, or 60)'
+        required: false
+        default: '30'
 
 jobs:
   run-script:
@@ -96,7 +104,9 @@ jobs:
               workflow_id: 'Generate.yml',
               ref: 'main',
               inputs: {
-                hook_duration: '${{ github.event.inputs.hook_duration || '2' }}',
+                hook_duration:    '${{ github.event.inputs.hook_duration    || '2'  }}',
+                content_duration: '${{ github.event.inputs.content_duration || '4'  }}',
+                fps:              '${{ github.event.inputs.fps              || '30' }}',
                 screenshot_run_id: '${{ github.run_id }}'
               }
             });
