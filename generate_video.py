@@ -5,22 +5,27 @@ import random
 import datetime
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy.editor import AudioFileClip, VideoClip
+from moviepy.editor import AudioFileClip, VideoClip, VideoFileClip, concatenate_videoclips
 
-SCREENSHOT_PATH = "assets/analytics.png"
-AUDIO_PATH      = "assets/sound.mp3"
-OUTPUT_PATH     = "output/short.mp4"
+SCREENSHOT_PATH   = "assets/analytics.png"
+THUMBNAIL_PATH    = "assets/thumbnail.mp4"
+AUDIO_PATH        = "assets/sound.mp3"
+OUTPUT_PATH       = "output/short.mp4"
+INTERMEDIATE_PATH = "output/intermediate.mp4"
 
-DURATION = 10
-FPS      = 30
-W, H     = 1080, 1920
+FINAL_DURATION    = 8
+THUMBNAIL_DURATION = 4
+SHORT_CLIP_DURATION = 6  # last 6s of the 10s generated clip
+GENERATED_DURATION = 10
+FPS = 30
+W, H = 1080, 1920
 
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 FONT_REG  = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
 
-POLL_BG    = (230, 239, 255, 245)
-POLL_BLUE  = (0,   0,   178, 255)
-OPTION_BG  = (202, 221, 255, 240)
+POLL_BG   = (230, 239, 255, 245)
+POLL_BLUE = (0, 0, 178, 255)
+OPTION_BG = (202, 221, 255, 240)
 
 
 def get_font(size, bold=False):
@@ -42,8 +47,8 @@ def prepare_bg(path):
     return np.array(img.crop((x0, y0, x0 + W, y0 + H)))
 
 
-def zoom_frame(bg_np, t):
-    scale = 1.0 + 0.05 * (t / DURATION)
+def zoom_frame(bg_np, t, total=GENERATED_DURATION):
+    scale = 1.0 + 0.05 * (t / total)
     img = Image.fromarray(bg_np)
     nw, nh = int(W * scale), int(H * scale)
     img = img.resize((nw, nh), Image.LANCZOS)
@@ -79,10 +84,8 @@ def format_votes(n):
 
 def make_poll_sticker(show_pct=False, yes_pct=0, total_votes=0):
     pw, ph = 625, 460
-
     img  = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-
     draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)], radius=28, fill=POLL_BG)
 
     title_f = get_font(42, bold=True)
@@ -91,7 +94,6 @@ def make_poll_sticker(show_pct=False, yes_pct=0, total_votes=0):
     vote_f  = get_font(26)
 
     draw.text((18, 82), "Please Subscribe", font=title_f, fill=POLL_BLUE, anchor="lm")
-
     draw.rounded_rectangle([(18, 118), (pw - 18, 238)], radius=16, fill=OPTION_BG)
     draw.text((52, 178), "Yes", font=opt_f, fill=POLL_BLUE, anchor="lm")
     if show_pct:
@@ -106,7 +108,7 @@ def make_poll_sticker(show_pct=False, yes_pct=0, total_votes=0):
     return img
 
 
-def apply_alpha(img: Image.Image, scale: float) -> Image.Image:
+def apply_alpha(img, scale):
     r, g, b, a = img.split()
     a = a.point(lambda v: int(v * scale))
     return Image.merge("RGBA", (r, g, b, a))
@@ -142,8 +144,10 @@ def build_make_frame(bg_np, banner, poll_plain, poll_pct):
 
 
 def main():
+    os.makedirs("output", exist_ok=True)
+
     if not os.path.exists(SCREENSHOT_PATH):
-        print("[info] No analytics.png found — generating placeholder background.")
+        print("[info] No analytics.png — generating placeholder.")
         os.makedirs("assets", exist_ok=True)
         placeholder = Image.new("RGB", (W, H), (15, 15, 30))
         draw = ImageDraw.Draw(placeholder)
@@ -152,8 +156,6 @@ def main():
                   font=font, fill=(100, 120, 200), anchor="mm", align="center")
         placeholder.save(SCREENSHOT_PATH)
 
-    os.makedirs("output", exist_ok=True)
-
     countries = ['Georgia', 'Egypt', 'Australia', 'South Africa']
     today = datetime.date.today().isoformat()
     country = random.choice(countries)
@@ -161,7 +163,7 @@ def main():
     random.seed(seed)
     total_votes = random.randint(60, 4000)
     random.seed(seed + 1)
-    yes_pct     = random.randint(20, 40)  # No but I'll like gets majority
+    yes_pct = random.randint(20, 40)
 
     print("Preparing assets...")
     bg         = prepare_bg(SCREENSHOT_PATH)
@@ -169,19 +171,48 @@ def main():
     poll_plain = make_poll_sticker(show_pct=False)
     poll_pct   = make_poll_sticker(show_pct=True, yes_pct=yes_pct, total_votes=total_votes)
 
-    print("Rendering frames...")
-    clip = VideoClip(build_make_frame(bg, banner, poll_plain, poll_pct), duration=DURATION).set_fps(FPS)
+    print("Rendering 10s base clip...")
+    base_clip = VideoClip(
+        build_make_frame(bg, banner, poll_plain, poll_pct),
+        duration=GENERATED_DURATION
+    ).set_fps(FPS)
 
-    if os.path.exists(AUDIO_PATH):
-        print(f"Adding audio: {AUDIO_PATH}")
-        audio = AudioFileClip(AUDIO_PATH).subclip(0, DURATION)
-        clip  = clip.set_audio(audio)
+    # Take last 6 seconds
+    short_clip = base_clip.subclip(GENERATED_DURATION - SHORT_CLIP_DURATION, GENERATED_DURATION)
+
+    # Load 4s thumbnail video from Drive (downloaded by workflow)
+    if not os.path.exists(THUMBNAIL_PATH):
+        print("[warn] thumbnail.mp4 not found — skipping thumbnail intro.")
+        final_video = short_clip
     else:
-        print("[warn] No audio — silent.")
+        print("Loading thumbnail video...")
+        thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, THUMBNAIL_DURATION)
+        # Resize thumbnail to match 1080x1920 if needed
+        if thumb_clip.size != [W, H]:
+            thumb_clip = thumb_clip.resize((W, H))
+        final_video = concatenate_videoclips([thumb_clip, short_clip], method="compose")
+
+    # Audio over entire 8s
+    if os.path.exists(AUDIO_PATH):
+        print("Adding audio...")
+        audio = AudioFileClip(AUDIO_PATH).subclip(0, FINAL_DURATION)
+        final_video = final_video.set_audio(audio)
+    else:
+        print("[warn] No audio found — silent output.")
 
     print(f"Writing {OUTPUT_PATH} ...")
-    clip.write_videofile(OUTPUT_PATH, fps=FPS, codec="libx264",
-                         audio_codec="aac", preset="fast", threads=4, logger=None)
+    final_video.write_videofile(
+        OUTPUT_PATH, fps=FPS, codec="libx264",
+        audio_codec="aac", preset="fast", threads=4, logger=None
+    )
+
+    # Cleanup intermediate assets
+    print("Cleaning up downloaded assets...")
+    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH]:
+        if os.path.exists(path):
+            os.remove(path)
+            print(f"  deleted {path}")
+
     print(f"Done → {OUTPUT_PATH}")
 
 
