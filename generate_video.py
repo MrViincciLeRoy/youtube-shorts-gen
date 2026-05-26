@@ -16,11 +16,12 @@ W, H     = 1080, 1920
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 FONT_REG  = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
 
-POLL_BG    = (224, 234, 255, 252)
-POLL_BLUE  = (18,  18,  180, 255)
-OPTION_BG  = (202, 221, 255, 255)
-SOUND_BG   = (255, 255, 255, 255)
-SOUND_TEXT = (0,   0,   0,   255)
+# Reference image 2: card is ~60% wide, very light blue bg, lighter options
+POLL_BG   = (210, 228, 255, 248)   # lighter than before
+POLL_BLUE = (18,  18,  180, 255)
+OPTION_BG = (188, 212, 255, 255)   # slightly lighter
+SOUND_TEXT_FILL   = (255, 255, 255, 255)   # white center
+SOUND_TEXT_STROKE = (0,   0,   0,   255)   # black border
 
 
 def get_font(size, bold=False):
@@ -52,16 +53,25 @@ def zoom_frame(bg_np, t):
     return img.crop((xo, yo, xo + W, yo + H)).convert("RGBA")
 
 
+def draw_stroked_text(draw, pos, text, font, fill, stroke_color, stroke_width, anchor="mm"):
+    x, y = pos
+    for dx in range(-stroke_width, stroke_width + 1):
+        for dy in range(-stroke_width, stroke_width + 1):
+            if dx == 0 and dy == 0:
+                continue
+            draw.text((x + dx, y + dy), text, font=font, fill=stroke_color, anchor=anchor)
+    draw.text((x, y), text, font=font, fill=fill, anchor=anchor)
+
+
 def make_sound_banner():
-    bh = 190
-    pad_x, pad_y = 40, 24
-    img = Image.new("RGBA", (W, bh), (0, 0, 0, 0))
+    # No white card — just big stroked text over the bg like reference image 2
+    bh = 200
+    img  = Image.new("RGBA", (W, bh), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    draw.rounded_rectangle([(pad_x, pad_y), (W - pad_x, bh - pad_y)],
-                            radius=18, fill=SOUND_BG)
-    font = get_font(100, bold=True)
-    draw.text((W // 2, bh // 2), "USE THIS SOUND!",
-              font=font, fill=SOUND_TEXT, anchor="mm")
+    font = get_font(130, bold=True)
+    draw_stroked_text(draw, (W // 2, bh // 2), "USE THIS SOUND!",
+                      font, SOUND_TEXT_FILL, SOUND_TEXT_STROKE,
+                      stroke_width=8, anchor="mm")
     return img
 
 
@@ -74,54 +84,49 @@ def format_votes(n):
 
 
 def make_poll_sticker(show_pct=False, yes_votes=0, no_votes=0):
-    # Full-width card matching reference — ~960px wide, left margin 60px from frame edge
-    pw = 960
-    # Heights: top pad 24, title row ~90, gap 12, option1 ~110, gap 14, option2 ~110, gap 20, votes ~50, pad 20
-    ph = 24 + 90 + 12 + 110 + 14 + 110 + 20 + 50 + 20  # = 450
+    # Reference image 2: card ~60% of 1080 = ~648px, left-aligned with some margin
+    # Height: title ~80, opt1 ~100, gap, opt2 ~100, votes ~50 + padding
+    pw = 650
+    ph = 30 + 80 + 10 + 100 + 12 + 100 + 18 + 48 + 22   # = 420
 
     img  = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Card background
-    draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)], radius=36, fill=POLL_BG)
+    draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)], radius=30, fill=POLL_BG)
 
-    title_f = get_font(62, bold=True)
-    opt_f   = get_font(52, bold=True)
-    pct_f   = get_font(52, bold=True)
-    vote_f  = get_font(36)
+    title_f = get_font(52, bold=True)
+    opt_f   = get_font(46, bold=True)
+    pct_f   = get_font(44, bold=True)
+    vote_f  = get_font(32)
 
-    # Title — "Will you subscribe?" left aligned with padding 32
-    title_y = 24 + 45   # vertical center of title row
-    draw.text((32, title_y), "Will you subscribe?",
+    # Title
+    draw.text((26, 30 + 40), "Will you subscribe?",
               font=title_f, fill=POLL_BLUE, anchor="lm")
 
-    # Option rows
-    opt1_y0 = 24 + 90 + 12                      # 126
-    opt1_y1 = opt1_y0 + 110                      # 236
-    opt2_y0 = opt1_y1 + 14                       # 250
-    opt2_y1 = opt2_y0 + 110                      # 360
-
-    # Yes row
-    draw.rounded_rectangle([(16, opt1_y0), (pw - 16, opt1_y1)], radius=20, fill=OPTION_BG)
-    opt1_mid = (opt1_y0 + opt1_y1) // 2
-    draw.text((40, opt1_mid), "Yes", font=opt_f, fill=POLL_BLUE, anchor="lm")
+    # Option 1 — Yes
+    o1y0 = 30 + 80 + 10
+    o1y1 = o1y0 + 100
+    draw.rounded_rectangle([(14, o1y0), (pw - 14, o1y1)], radius=18, fill=OPTION_BG)
+    o1mid = (o1y0 + o1y1) // 2
+    draw.text((36, o1mid), "Yes", font=opt_f, fill=POLL_BLUE, anchor="lm")
     if show_pct:
         total = yes_votes + no_votes or 1
         yes_pct = int(round(yes_votes / total * 100))
-        draw.text((pw - 40, opt1_mid), f"{yes_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
+        draw.text((pw - 30, o1mid), f"{yes_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
 
-    # No row
-    draw.rounded_rectangle([(16, opt2_y0), (pw - 16, opt2_y1)], radius=20, fill=OPTION_BG)
-    opt2_mid = (opt2_y0 + opt2_y1) // 2
-    draw.text((40, opt2_mid), "No but I'll like", font=opt_f, fill=POLL_BLUE, anchor="lm")
+    # Option 2 — No but I'll like
+    o2y0 = o1y1 + 12
+    o2y1 = o2y0 + 100
+    draw.rounded_rectangle([(14, o2y0), (pw - 14, o2y1)], radius=18, fill=OPTION_BG)
+    o2mid = (o2y0 + o2y1) // 2
+    draw.text((36, o2mid), "No but I'll like", font=opt_f, fill=POLL_BLUE, anchor="lm")
     if show_pct:
         no_pct = 100 - yes_pct
-        draw.text((pw - 40, opt2_mid), f"{no_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
+        draw.text((pw - 30, o2mid), f"{no_pct}%", font=pct_f, fill=POLL_BLUE, anchor="rm")
 
-    # Vote count centered
-    votes_y = opt2_y1 + 20 + 25
-    total_votes = yes_votes + no_votes
-    draw.text((pw // 2, votes_y), format_votes(total_votes),
+    # Vote count
+    votes_y = o2y1 + 18 + 24
+    draw.text((pw // 2, votes_y), format_votes(yes_votes + no_votes),
               font=vote_f, fill=POLL_BLUE, anchor="mm")
 
     return img
@@ -134,6 +139,7 @@ def apply_alpha(img: Image.Image, scale: float) -> Image.Image:
 
 
 def build_make_frame(bg_np, banner):
+    # Banner sits ~40% down — same as reference
     banner_y = int(H * 0.40)
 
     total_votes = random.randint(800, 3500)
@@ -143,9 +149,9 @@ def build_make_frame(bg_np, banner):
     poll_no_pct   = make_poll_sticker(show_pct=False, yes_votes=yes_votes, no_votes=no_votes)
     poll_with_pct = make_poll_sticker(show_pct=True,  yes_votes=yes_votes, no_votes=no_votes)
 
-    # Left-align poll with 60px margin from left edge
+    # Left-aligned with ~60px margin, poll sits just below banner
     poll_x = 60
-    poll_y = int(H * 0.57)
+    poll_y = banner_y + banner.height + 30
 
     def make_frame(t):
         base = zoom_frame(bg_np, t)
