@@ -218,7 +218,10 @@ def main():
             "ffmpeg", "-y",
             "-f", "concat", "-safe", "0",
             "-i", concat_list,
-            "-c", "copy", silent_concat
+            "-c:v", "libx264", "-preset", "fast",
+            "-vf", f"scale={W}:{H}",
+            "-r", str(FPS),
+            "-an", silent_concat
         ], check=True)
     else:
         print("[warn] No thumbnail — using trimmed clip only.")
