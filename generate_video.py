@@ -5,7 +5,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from moviepy.editor import AudioFileClip, VideoClip
 
-# ── Config ───────────────────────────────────────────────────────────────────
 SCREENSHOT_PATH = "assets/analytics.png"
 AUDIO_PATH      = "assets/sound.mp3"
 OUTPUT_PATH     = "output/short.mp4"
@@ -17,14 +16,13 @@ W, H     = 1080, 1920
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
 FONT_REG  = "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
 
-# Exact pixel-sampled colors
-POLL_BG    = (230, 239, 255, 245)   # #e6efff
-POLL_BLUE  = (0,   0,   178, 255)   # #0000b2
-OPTION_BG  = (219, 232, 255, 240)   # #dbe8ff
-SOUND_BG   = (255, 255, 255, 255)   # white
-SOUND_TEXT = (0,   0,   0,   255)   # black
+POLL_BG    = (230, 239, 255, 245)
+POLL_BLUE  = (0,   0,   178, 255)
+OPTION_BG  = (202, 221, 255, 240)
+SOUND_BG   = (255, 255, 255, 255)
+SOUND_TEXT = (0,   0,   0,   255)
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+
 def get_font(size, bold=False):
     path = FONT_BOLD if bold else FONT_REG
     try:
@@ -55,7 +53,6 @@ def zoom_frame(bg_np, t):
 
 
 def make_sound_banner():
-    """White card, big black 'Use this sound'."""
     bh = 190
     pad_x, pad_y = 40, 24
     img = Image.new("RGBA", (W, bh), (0, 0, 0, 0))
@@ -69,17 +66,11 @@ def make_sound_banner():
 
 
 def make_poll_sticker():
-    """
-    Narrower + taller poll card matching real YT poll proportions.
-    Width  = 625 px  (~58 % of 1080)
-    Height = 420 px  (option rows are generously tall with real padding)
-    """
     pw, ph = 625, 460
 
     img  = Image.new("RGBA", (pw, ph), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # ── card body ────────────────────────────────────────────────────────────
     draw.rounded_rectangle([(0, 0), (pw - 1, ph - 1)],
                             radius=28, fill=POLL_BG)
 
@@ -88,11 +79,10 @@ def make_poll_sticker():
     pct_f   = get_font(34)
     vote_f  = get_font(26)
 
-    # "Please Subscribe" — left-aligned, generous top padding
-    draw.text((52, 82), "Please Subscribe",
+    # Title aligned to x=18 (same as box border)
+    draw.text((18, 82), "Please Subscribe",
               font=title_f, fill=POLL_BLUE, anchor="lm")
 
-    # ── Yes row  (y 118 → 238) ───────────────────────────────────────────────
     draw.rounded_rectangle([(18, 118), (pw - 18, 238)],
                             radius=16, fill=OPTION_BG)
     draw.text((52, 178), "Yes",
@@ -100,7 +90,6 @@ def make_poll_sticker():
     draw.text((pw - 40, 178), "0%",
               font=pct_f, fill=POLL_BLUE, anchor="rm")
 
-    # ── No row  (y 252 → 372) ────────────────────────────────────────────────
     draw.rounded_rectangle([(18, 252), (pw - 18, 372)],
                             radius=16, fill=OPTION_BG)
     draw.text((52, 312), "No",
@@ -108,7 +97,6 @@ def make_poll_sticker():
     draw.text((pw - 40, 312), "0%",
               font=pct_f, fill=POLL_BLUE, anchor="rm")
 
-    # "0 votes"
     draw.text((pw // 2, ph - 30), "0 votes",
               font=vote_f, fill=POLL_BLUE, anchor="mm")
 
@@ -121,7 +109,6 @@ def apply_alpha(img: Image.Image, scale: float) -> Image.Image:
     return Image.merge("RGBA", (r, g, b, a))
 
 
-# ── Frame factory ─────────────────────────────────────────────────────────────
 def build_make_frame(bg_np, banner, poll):
     banner_y = int(H * 0.40)
     poll_x   = (W - poll.width) // 2
@@ -150,10 +137,16 @@ def build_make_frame(bg_np, banner, poll):
     return make_frame
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     if not os.path.exists(SCREENSHOT_PATH):
-        sys.exit(f"[error] screenshot not found: {SCREENSHOT_PATH}")
+        # Generate a placeholder analytics screenshot for preview
+        print("[info] No analytics.png found — generating placeholder background.")
+        placeholder = Image.new("RGB", (W, H), (15, 15, 30))
+        draw = ImageDraw.Draw(placeholder)
+        font = get_font(60, bold=True)
+        draw.text((W // 2, 200), "Analytics Screenshot\nGoes Here",
+                  font=font, fill=(100, 120, 200), anchor="mm", align="center")
+        placeholder.save(SCREENSHOT_PATH)
 
     os.makedirs("output", exist_ok=True)
     print("Preparing assets...")
@@ -169,7 +162,7 @@ def main():
         audio = AudioFileClip(AUDIO_PATH).subclip(0, DURATION)
         clip  = clip.set_audio(audio)
     else:
-        print(f"[warn] No audio at {AUDIO_PATH} — silent.")
+        print("[warn] No audio — silent.")
 
     print(f"Writing {OUTPUT_PATH} ...")
     clip.write_videofile(OUTPUT_PATH, fps=FPS, codec="libx264",
