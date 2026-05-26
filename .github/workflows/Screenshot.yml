@@ -1,173 +1,81 @@
-name: YouTube Channel Screenshot
+name: Screenshots 
 
 on:
-  workflow_dispatch:
-    inputs:
-      channel_url:
-        description: "YouTube channel URL (e.g. https://www.youtube.com/@ptanetwork)"
-        required: true
-        default: "https://www.youtube.com/@ptanetwork"
-
-      pages:
-        description: "Pages to capture (comma-separated: about,channel,videos,community,shorts)"
-        required: true
-        default: "about,channel"
-
-      full_page:
-        description: "Capture full scrollable page?"
-        required: true
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
-
-      device_preset:
-        description: "Device preset"
-        required: true
-        default: "pixel8"
-        type: choice
-        options:
-          - pixel8
-          - iphone15
-          - galaxy_s23
-          - custom
-
-      viewport_width:
-        description: "Custom viewport width (only if device_preset=custom)"
-        required: false
-        default: "393"
-
-      viewport_height:
-        description: "Custom viewport height (only if device_preset=custom)"
-        required: false
-        default: "852"
-
-      scale_factor:
-        description: "Custom device scale factor (only if device_preset=custom)"
-        required: false
-        default: "2.75"
-
-      wait_ms:
-        description: "Extra wait time in ms after page load (for lazy content)"
-        required: false
-        default: "3000"
-
-      image_format:
-        description: "Screenshot format"
-        required: true
-        default: "png"
-        type: choice
-        options:
-          - png
-          - jpeg
-
-      upload_artifact:
-        description: "Upload screenshots as artifact?"
-        required: true
-        default: "true"
-        type: choice
-        options:
-          - "true"
-          - "false"
-
-      artifact_retention_days:
-        description: "Artifact retention in days"
-        required: false
-        default: "7"
-
   schedule:
-    - cron: "0 6 * * *"
+    - cron: "0 6 * * *"  # daily at 06:00 UTC — adjust as needed
+  workflow_dispatch:
 
 jobs:
-  screenshot:
+  run-script:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
-      - name: Install Xvfb and dependencies
+      - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb
-          pip install playwright playwright-stealth
-          python -m playwright install chromium --with-deps
+          python -m pip install --upgrade pip
+          pip install playwright
 
-      - name: Run screenshot script (headed via Xvfb)
-        env:
-          DISPLAY: ":99"
-          CHANNEL_URL: ${{ github.event.inputs.channel_url || 'https://www.youtube.com/@ptanetwork' }}
-          PAGES: ${{ github.event.inputs.pages || 'about,channel' }}
-          FULL_PAGE: ${{ github.event.inputs.full_page || 'false' }}
-          DEVICE_PRESET: ${{ github.event.inputs.device_preset || 'pixel8' }}
-          VIEWPORT_WIDTH: ${{ github.event.inputs.viewport_width || '393' }}
-          VIEWPORT_HEIGHT: ${{ github.event.inputs.viewport_height || '852' }}
-          SCALE_FACTOR: ${{ github.event.inputs.scale_factor || '2.75' }}
-          WAIT_MS: ${{ github.event.inputs.wait_ms || '3000' }}
-          HEADLESS: "false"
-          IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
-          YOUTUBE_EMAIL: ${{ secrets.YOUTUBE_EMAIL }}
-          YOUTUBE_PASSWORD: ${{ secrets.YOUTUBE_PASSWORD }}
+      - name: Install Playwright Browsers and System Dependencies
+        run: playwright install chromium --with-deps
+
+      - name: Run scraper and save screenshot
         run: |
-          Xvfb :99 -screen 0 1920x1080x24 &
-          sleep 2
-          python screenshot.py
+          cat << 'EOF' > inline_script.py
+          import asyncio
+          from playwright.async_api import async_playwright
 
-      - name: Push screenshots to branch
+          async def main():
+              async with async_playwright() as p:
+                  browser = await p.chromium.launch(headless=True)
+                  ctx = await browser.new_context(
+                      viewport={"width": 393, "height": 852},
+                      device_scale_factor=2.75,
+                      user_agent="Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+                      is_mobile=True,
+                      has_touch=True,
+                  )
+                  page = await ctx.new_page()
+                  await page.goto(
+                      "https://youtube.com/@Ptanetwok?si=aBmBmLeflHqtAnpN",
+                      wait_until="networkidle",
+                      timeout=30000,
+                  )
+                  await page.wait_for_timeout(3000)
+
+                  clicked = await page.evaluate("""
+                      () => {
+                          const btn = document.querySelector('span.truncated-text-wiz__absolute-button');
+                          if (btn) { btn.click(); return true; }
+                          return false;
+                      }
+                  """)
+
+                  if not clicked:
+                      more_btn = page.get_by_text("...more")
+                      if await more_btn.count() > 0:
+                          await more_btn.first.scroll_into_view_if_needed()
+                          await more_btn.first.click(force=True)
+
+                  await page.wait_for_timeout(2000)
+                  await page.screenshot(path="assets/analytics.png", full_page=False)
+                  print("Screenshot saved to assets/analytics.png")
+                  await browser.close()
+
+          asyncio.run(main())
+          EOF
+          python inline_script.py
+
+      - name: Commit and push screenshot
         run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-
-          # Save screenshots then wipe the folder so checkout doesn't complain
-          cp -r screenshots /tmp/screenshots
-          rm -rf screenshots
-
-          git fetch origin
-
-          if git ls-remote --exit-code origin screenshots; then
-            git checkout -B screenshots origin/screenshots
-          else
-            git checkout --orphan screenshots
-            git rm -rf . --quiet 2>/dev/null || true
-          fi
-
-          cp /tmp/screenshots/* .
-
-          git add -A
-          git commit -m "run #${{ github.run_number }} - $(date -u '+%Y-%m-%d %H:%M UTC')" || echo "nothing to commit"
-          git push --force origin screenshots
-
-      - name: Write job summary
-        run: |
-          REPO="${{ github.repository }}"
-          BASE_URL="https://raw.githubusercontent.com/${REPO}/screenshots"
-
-          echo "# 📸 Screenshots — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Channel:** \`${{ github.event.inputs.channel_url || 'https://www.youtube.com/@ptanetwork' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Pages:** \`${{ github.event.inputs.pages || 'about,channel' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "**Device:** \`${{ github.event.inputs.device_preset || 'pixel8' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          for f in /tmp/screenshots/*; do
-            name=$(basename "$f")
-            echo "### \`${name}\`" >> $GITHUB_STEP_SUMMARY
-            echo "![${name}](${BASE_URL}/${name})" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          done
-
-      - name: Upload screenshots
-        if: ${{ github.event.inputs.upload_artifact != 'false' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: pta-screenshots-${{ github.run_number }}
-          path: /tmp/screenshots/
-          retention-days: ${{ github.event.inputs.artifact_retention_days || 7 }}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add assets/analytics.png
+          git diff --cached --quiet || git commit -m "chore: update analytics screenshot"
+          git push
