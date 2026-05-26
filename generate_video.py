@@ -12,15 +12,12 @@ THUMBNAIL_PATH  = "assets/thumbnail.mp4"
 AUDIO_PATH      = "assets/sound.mp3"
 OUTPUT_PATH     = "output/short.mp4"
 
-# HOOK_DURATION: 2 = short punchy intro, 4 = longer intro (set via env var)
 HOOK_DURATION    = int(os.environ.get("HOOK_DURATION", "2"))
-CONTENT_DURATION = 4
+CONTENT_DURATION = int(os.environ.get("CONTENT_DURATION", "4"))
+FPS              = int(os.environ.get("FPS", "30"))
 FINAL_DURATION   = HOOK_DURATION + CONTENT_DURATION
-
-# We generate more than we need so poll animations have time to play out
 GENERATED_DURATION = CONTENT_DURATION + 6
 
-FPS  = 30
 W, H = 1080, 1920
 
 FONT_BOLD = "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"
@@ -50,7 +47,9 @@ def prepare_bg(path):
     return np.array(img.crop((x0, y0, x0 + W, y0 + H)))
 
 
-def zoom_frame(bg_np, t, total=GENERATED_DURATION):
+def zoom_frame(bg_np, t, total=None):
+    if total is None:
+        total = GENERATED_DURATION
     scale = 1.0 + 0.05 * (t / total)
     img = Image.fromarray(bg_np)
     nw, nh = int(W * scale), int(H * scale)
@@ -149,7 +148,7 @@ def build_make_frame(bg_np, banner, poll_plain, poll_pct):
 def main():
     os.makedirs("output", exist_ok=True)
 
-    print(f"Hook: {HOOK_DURATION}s  |  Content: {CONTENT_DURATION}s  |  Total: {FINAL_DURATION}s")
+    print(f"Hook: {HOOK_DURATION}s  |  Content: {CONTENT_DURATION}s  |  Total: {FINAL_DURATION}s  |  FPS: {FPS}")
 
     if not os.path.exists(SCREENSHOT_PATH):
         print("[info] No analytics.png — generating placeholder.")
@@ -182,7 +181,6 @@ def main():
         duration=GENERATED_DURATION
     ).set_fps(FPS)
 
-    # Always take the last CONTENT_DURATION seconds so poll reveal is included
     content_clip = base_clip.subclip(GENERATED_DURATION - CONTENT_DURATION, GENERATED_DURATION)
 
     if not os.path.exists(THUMBNAIL_PATH):
@@ -207,12 +205,6 @@ def main():
         OUTPUT_PATH, fps=FPS, codec="libx264",
         audio_codec="aac", preset="fast", threads=4, logger=None
     )
-
-    print("Cleaning up downloaded assets...")
-    for path in [THUMBNAIL_PATH, AUDIO_PATH, SCREENSHOT_PATH]:
-        if os.path.exists(path):
-            os.remove(path)
-            print(f"  deleted {path}")
 
     print(f"Done → {OUTPUT_PATH}")
 
