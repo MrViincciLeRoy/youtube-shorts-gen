@@ -6,6 +6,14 @@ on:
     paths:
       - "assets/analytics.png"
   workflow_dispatch:
+    inputs:
+      hook_duration:
+        description: 'Hook intro length in seconds (2 = punchy, 4 = longer)'
+        required: true
+        default: '2'
+
+env:
+  HOOK_DURATION: ${{ github.event.inputs.hook_duration || '2' }}
 
 jobs:
   build:
@@ -31,18 +39,19 @@ jobs:
           cache: pip
 
       - name: Install Python dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install -r requirements.txt
+          pip install gdown google-api-python-client google-auth google-auth-oauthlib google-auth-httplib2
 
       - name: Download thumbnail video from Google Drive
-        run: |
-          pip install gdown
-          gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_THUMBNAIL_ID }}" -O assets/thumbnail.mp4
+        run: gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_THUMBNAIL_ID }}" -O assets/thumbnail.mp4
 
       - name: Download sound from Google Drive
-        run: |
-          gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_SOUND_ID }}" -O assets/sound.mp3
+        run: gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_SOUND_ID }}" -O assets/sound.mp3
 
       - name: Generate video
+        env:
+          HOOK_DURATION: ${{ env.HOOK_DURATION }}
         run: python generate_video.py
 
       - name: Upload video artifact
@@ -51,6 +60,18 @@ jobs:
           name: youtube-short-${{ github.run_number }}
           path: output/short.mp4
           retention-days: 14
+
+      - name: Write YouTube token
+        env:
+          YOUTUBE_TOKEN: ${{ secrets.YOUTUBE_TOKEN }}
+        run: echo "$YOUTUBE_TOKEN" | base64 --decode > token.pkl
+
+      - name: Upload to YouTube
+        run: python upload_youtube.py
+
+      - name: Remove YouTube token
+        if: always()
+        run: rm -f token.pkl
 
       - name: Commit deletion of downloaded/used assets
         run: |
