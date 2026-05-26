@@ -1,0 +1,39 @@
+name: Generate YouTube Short
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "assets/**"
+      - "generate_video.py"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-liberation fonts-dejavu-core
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate video
+        run: python generate_video.py
+
+      - name: Upload video
+        uses: actions/upload-artifact@v4
+        with:
+          name: youtube-short-${{ github.run_number }}
+          path: output/short.mp4
+          retention-days: 14
