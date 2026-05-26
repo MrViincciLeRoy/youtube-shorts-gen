@@ -5,7 +5,7 @@ import random
 import datetime
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
-from moviepy import AudioFileClip, VideoClip, VideoFileClip, concatenate_videoclips
+from moviepy.editor import AudioFileClip, VideoClip, VideoFileClip, concatenate_videoclips
 
 SCREENSHOT_PATH   = "assets/analytics.png"
 THUMBNAIL_PATH    = "assets/thumbnail.mp4"
@@ -189,7 +189,7 @@ def main():
         thumb_clip = VideoFileClip(THUMBNAIL_PATH).subclip(0, THUMBNAIL_DURATION)
         # Resize thumbnail to match 1080x1920 if needed
         if thumb_clip.size != [W, H]:
-            thumb_clip = thumb_clip.resized((W, H))
+            thumb_clip = thumb_clip.resize((W, H))
         final_video = concatenate_videoclips([thumb_clip, short_clip], method="compose")
 
     # Audio over entire 8s
