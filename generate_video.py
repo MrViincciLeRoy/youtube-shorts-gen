@@ -120,12 +120,12 @@ def build_make_frame(bg_np, banner, poll_plain, poll_pct):
         base = zoom_frame(bg_np, t)
         base.paste(banner, (0, banner_y), banner)
 
-        if t >= 2.0:
+        if t >= 0.5:
             poll = poll_pct if t >= 7.0 else poll_plain
-            progress = min(1.0, (t - 2.0) / 0.4)
+            progress = min(1.0, (t - 0.5) / 0.4)
             card = apply_alpha(poll.copy(), progress)
-            if t < 2.6:
-                boom = 1.0 + 0.055 * np.sin(np.pi * (t - 2.0) / 0.4)
+            if t < 1.1:
+                boom = 1.0 + 0.055 * np.sin(np.pi * (t - 0.5) / 0.4)
                 nw = int(poll.width * boom)
                 nh = int(poll.height * boom)
                 card = card.resize((nw, nh), Image.LANCZOS)
