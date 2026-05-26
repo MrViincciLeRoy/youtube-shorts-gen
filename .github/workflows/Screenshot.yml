@@ -131,17 +131,20 @@ jobs:
 
           cp -r screenshots /tmp/screenshots
 
-          git fetch origin screenshots 2>/dev/null && git checkout screenshots || git checkout --orphan screenshots
+          git fetch origin
 
-          if ! git show-ref --quiet refs/remotes/origin/screenshots; then
+          if git ls-remote --exit-code origin screenshots; then
+            git checkout -B screenshots origin/screenshots
+          else
+            git checkout --orphan screenshots
             git rm -rf . --quiet 2>/dev/null || true
           fi
 
           cp /tmp/screenshots/* .
 
-          git add *.png *.jpeg 2>/dev/null || git add *.png 2>/dev/null || true
+          git add -A
           git commit -m "run #${{ github.run_number }} - $(date -u '+%Y-%m-%d %H:%M UTC')" || echo "nothing to commit"
-          git push origin screenshots
+          git push --force origin screenshots
 
       - name: Write job summary
         run: |
