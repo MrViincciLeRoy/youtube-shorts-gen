@@ -126,7 +126,9 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
+          # Save screenshots then wipe the folder so checkout doesn't complain
           cp -r screenshots /tmp/screenshots
+          rm -rf screenshots
 
           git fetch origin
 
