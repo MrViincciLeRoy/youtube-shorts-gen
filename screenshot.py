@@ -1,5 +1,6 @@
 import asyncio
 import os
+from pathlib import Path
 from playwright.async_api import async_playwright
 
 CHANNEL = os.getenv("CHANNEL_URL", "https://www.youtube.com/@ptanetwork")
@@ -9,6 +10,7 @@ DEVICE_PRESET = os.getenv("DEVICE_PRESET", "pixel8")
 WAIT_MS = int(os.getenv("WAIT_MS", "3000"))
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
 IMAGE_FORMAT = os.getenv("IMAGE_FORMAT", "png")
+OUT_DIR = Path("screenshots")
 
 PRESETS = {
     "pixel8": {
@@ -45,16 +47,15 @@ PAGE_PATHS = {
 }
 
 def build_url(base, tab):
-    path = PAGE_PATHS.get(tab, f"/{tab}")
-    return f"{base.rstrip('/')}{path}"
+    return f"{base.rstrip('/')}{PAGE_PATHS.get(tab, f'/{tab}')}"
 
 async def shoot(page, url, name):
     print(f"→ {url}")
     await page.goto(url, wait_until="networkidle", timeout=30_000)
     await page.wait_for_timeout(WAIT_MS)
-    path = f"pta_{name}.{IMAGE_FORMAT}"
+    path = OUT_DIR / f"pta_{name}.{IMAGE_FORMAT}"
     await page.screenshot(
-        path=path,
+        path=str(path),
         full_page=FULL_PAGE,
         type=IMAGE_FORMAT,
         **({"quality": 85} if IMAGE_FORMAT == "jpeg" else {}),
@@ -62,22 +63,16 @@ async def shoot(page, url, name):
     print(f"  saved {path}")
 
 async def main():
+    OUT_DIR.mkdir(exist_ok=True)
     device = PRESETS.get(DEVICE_PRESET, PRESETS["pixel8"])
     tabs = [t.strip() for t in PAGES_INPUT.split(",") if t.strip()]
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=HEADLESS)
-        ctx = await browser.new_context(
-            **device,
-            is_mobile=True,
-            has_touch=True,
-        )
+        ctx = await browser.new_context(**device, is_mobile=True, has_touch=True)
         page = await ctx.new_page()
-
         for tab in tabs:
-            url = build_url(CHANNEL, tab)
-            await shoot(page, url, tab)
-
+            await shoot(page, build_url(CHANNEL, tab), tab)
         await browser.close()
         print("Done.")
 
