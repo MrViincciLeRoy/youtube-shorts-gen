@@ -205,11 +205,13 @@ def main():
             "-an", scaled_thumb
         ], check=True)
 
-        # Concat list
+        # Concat list — must use absolute paths
         concat_list = "output/concat.txt"
+        abs_thumb = os.path.abspath("output/thumb_scaled.mp4")
+        abs_trimmed = os.path.abspath(trimmed_path)
         with open(concat_list, "w") as f:
-            f.write(f"file 'thumb_scaled.mp4'")
-            f.write(f"file 'trimmed.mp4'")
+            f.write(f"file '{abs_thumb}'")
+            f.write(f"file '{abs_trimmed}'")
 
         silent_concat = "output/silent_final.mp4"
         subprocess.run([
