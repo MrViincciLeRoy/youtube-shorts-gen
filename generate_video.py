@@ -210,8 +210,8 @@ def main():
         abs_thumb = os.path.abspath("output/thumb_scaled.mp4")
         abs_trimmed = os.path.abspath(trimmed_path)
         with open(concat_list, "w") as f:
-            f.write(f"file '{abs_thumb}'")
-            f.write(f"file '{abs_trimmed}'")
+            f.write(f"file '{abs_thumb}'\n")
+            f.write(f"file '{abs_trimmed}'\n")
 
         silent_concat = "output/silent_final.mp4"
         subprocess.run([
