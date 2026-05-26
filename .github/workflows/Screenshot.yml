@@ -86,7 +86,6 @@ on:
         default: "7"
 
   schedule:
-    # Runs daily at 06:00 UTC — comment out if not needed
     - cron: "0 6 * * *"
 
 jobs:
@@ -126,5 +125,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: pta-screenshots-${{ github.run_number }}
-          path: "*.png *.jpeg"
+          path: screenshots/
           retention-days: ${{ github.event.inputs.artifact_retention_days || 7 }}
