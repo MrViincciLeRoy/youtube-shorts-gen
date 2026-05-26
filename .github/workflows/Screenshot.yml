@@ -118,6 +118,7 @@ jobs:
           WAIT_MS: ${{ github.event.inputs.wait_ms || '3000' }}
           HEADLESS: ${{ github.event.inputs.headless || 'true' }}
           IMAGE_FORMAT: ${{ github.event.inputs.image_format || 'png' }}
+          YOUTUBE_COOKIES: ${{ secrets.YOUTUBE_COOKIES }}
         run: python screenshot.py
 
       - name: Upload screenshots
