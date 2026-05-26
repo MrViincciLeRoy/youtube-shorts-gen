@@ -36,11 +36,11 @@ jobs:
       - name: Download thumbnail video from Google Drive
         run: |
           pip install gdown
-          gdown --id ${{ secrets.GDRIVE_THUMBNAIL_ID }} -O assets/thumbnail.mp4
+          gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_THUMBNAIL_ID }}" -O assets/thumbnail.mp4
 
       - name: Download sound from Google Drive
         run: |
-          gdown --id ${{ secrets.GDRIVE_SOUND_ID }} -O assets/sound.mp3
+          gdown "https://drive.google.com/uc?id=${{ secrets.GDRIVE_SOUND_ID }}" -O assets/sound.mp3
 
       - name: Generate video
         run: python generate_video.py
