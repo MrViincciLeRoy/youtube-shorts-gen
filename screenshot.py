@@ -39,9 +39,10 @@ PRESETS = {
     },
 }
 
+# /about no longer exists — it's a modal on the channel home now
 PAGE_PATHS = {
     "channel": "",
-    "about": "/about",
+    "about": "",       # same URL, we click the about panel after load
     "videos": "/videos",
     "shorts": "/shorts",
     "community": "/community",
@@ -53,10 +54,35 @@ def build_url(base, tab):
     new_path = parsed.path.rstrip("/") + path
     return urlunparse(parsed._replace(path=new_path))
 
-async def shoot(page, url, name):
+async def open_about_panel(page):
+    # Try clicking the channel description / "more" button to expand about info
+    selectors = [
+        "tp-yt-paper-dialog",                          # about dialog trigger
+        "#description-container",
+        "ytm-channel-about-metadata-renderer",
+        "#channel-description",
+        "button[aria-label*='About']",
+        "#more-button",
+        ".truncated-text-wiz__absolute-button",
+    ]
+    for sel in selectors:
+        try:
+            el = page.locator(sel).first
+            if await el.is_visible(timeout=2000):
+                await el.click()
+                await page.wait_for_timeout(1500)
+                print("  opened about panel")
+                return
+        except Exception:
+            continue
+    print("  about panel not found — screenshotting channel home as fallback")
+
+async def shoot(page, url, name, is_about=False):
     print(f"→ {url}")
     await page.goto(url, wait_until="networkidle", timeout=30_000)
     await page.wait_for_timeout(WAIT_MS)
+    if is_about:
+        await open_about_panel(page)
     path = OUT_DIR / f"pta_{name}.{IMAGE_FORMAT}"
     await page.screenshot(
         path=str(path),
@@ -76,7 +102,7 @@ async def main():
         ctx = await browser.new_context(**device, is_mobile=True, has_touch=True)
         page = await ctx.new_page()
         for tab in tabs:
-            await shoot(page, build_url(CHANNEL, tab), tab)
+            await shoot(page, build_url(CHANNEL, tab), tab, is_about=(tab == "about"))
         await browser.close()
         print("Done.")
 
