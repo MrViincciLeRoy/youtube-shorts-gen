@@ -11,6 +11,7 @@ DEVICE_PRESET = os.getenv("DEVICE_PRESET", "pixel8")
 WAIT_MS = int(os.getenv("WAIT_MS", "3000"))
 HEADLESS = os.getenv("HEADLESS", "true").lower() == "true"
 IMAGE_FORMAT = os.getenv("IMAGE_FORMAT", "png")
+COOKIES_RAW = os.getenv("YOUTUBE_COOKIES", "")
 OUT_DIR = Path("screenshots")
 
 PRESETS = {
@@ -39,10 +40,9 @@ PRESETS = {
     },
 }
 
-# /about no longer exists — it's a modal on the channel home now
 PAGE_PATHS = {
     "channel": "",
-    "about": "",       # same URL, we click the about panel after load
+    "about": "",
     "videos": "/videos",
     "shorts": "/shorts",
     "community": "/community",
@@ -54,16 +54,36 @@ def build_url(base, tab):
     new_path = parsed.path.rstrip("/") + path
     return urlunparse(parsed._replace(path=new_path))
 
+def parse_cookies(raw: str) -> list:
+    if not raw.strip():
+        return []
+    cookies = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 7:
+            continue
+        domain, _, path, secure, expires, name, value = parts[:7]
+        cookies.append({
+            "name": name,
+            "value": value,
+            "domain": domain,
+            "path": path,
+            "secure": secure.upper() == "TRUE",
+            "httpOnly": False,
+            "expires": int(expires) if expires.isdigit() else -1,
+        })
+    return cookies
+
 async def open_about_panel(page):
-    # Try clicking the channel description / "more" button to expand about info
     selectors = [
-        "tp-yt-paper-dialog",                          # about dialog trigger
-        "#description-container",
         "ytm-channel-about-metadata-renderer",
-        "#channel-description",
+        "#description-container",
+        ".truncated-text-wiz__absolute-button",
         "button[aria-label*='About']",
         "#more-button",
-        ".truncated-text-wiz__absolute-button",
     ]
     for sel in selectors:
         try:
@@ -75,7 +95,7 @@ async def open_about_panel(page):
                 return
         except Exception:
             continue
-    print("  about panel not found — screenshotting channel home as fallback")
+    print("  about panel not found — using channel home")
 
 async def shoot(page, url, name, is_about=False):
     print(f"→ {url}")
@@ -96,10 +116,16 @@ async def main():
     OUT_DIR.mkdir(exist_ok=True)
     device = PRESETS.get(DEVICE_PRESET, PRESETS["pixel8"])
     tabs = [t.strip() for t in PAGES_INPUT.split(",") if t.strip()]
+    cookies = parse_cookies(COOKIES_RAW)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=HEADLESS)
         ctx = await browser.new_context(**device, is_mobile=True, has_touch=True)
+        if cookies:
+            await ctx.add_cookies(cookies)
+            print(f"  loaded {len(cookies)} cookies")
+        else:
+            print("  WARNING: no cookies — may get bot-blocked")
         page = await ctx.new_page()
         for tab in tabs:
             await shoot(page, build_url(CHANNEL, tab), tab, is_about=(tab == "about"))
